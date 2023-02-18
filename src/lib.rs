@@ -10,68 +10,48 @@ use colored::Colorize;
 use rayon::prelude::*;
 
 /// Calculates the hashes for a given cheat string
-/// 
-/// For example, `calc_hash("birdman")` will return (`0x07d8f451`, `0x0d442a0b`) (as u32s)
-pub fn calc_hash(cheat_string: String) -> (u32, u32) {
+pub fn calc_hash(cheat_string: String) -> u32 {
     let mut obfuscated_cheat_string: [u8; 20] = *b"12345678901234567890";
     let mut cheat_string_crc = !crc32fast::hash(cheat_string.as_bytes()) as i32;
-    let mut accumulator = 0u32;
     let mut new_crc: i32;
     let mut new_crc_str = String::new();
-    let mut new_crc_str_len: usize;
 
     for i in 0..100_000 {
-        // Re-uppercase obfuscated cheat string
-        for x in obfuscated_cheat_string.iter_mut() {
-            if *x == b'x' {
-                *x = b'X';
-            }
-        }
-
         new_crc = cheat_string_crc + i;
 
         new_crc_str.clear();
         let _ignore_err = write!(new_crc_str, "{new_crc}");
 
-        new_crc_str_len = new_crc_str.len();
-        
         let new_crc_bytes = new_crc_str.as_bytes();
-        for (j, &b) in new_crc_bytes.iter().enumerate() {
-            obfuscated_cheat_string[j] = b;
-            accumulator += (b as u32) * 0x3ff;
-        }
 
-        obfuscated_cheat_string[new_crc_str_len] = b'X';
-
-        for &char in &obfuscated_cheat_string[new_crc_str_len..] {
-            accumulator += (char as u32) * 0x3ff;
-        }
-
-        // Lowercase obfuscated cheat string before hash is computed
-        for x in &mut obfuscated_cheat_string[new_crc_str_len..] {
-            if *x == b'X' {
-                *x = b'x';
-            }
-        }
+        obfuscated_cheat_string[..new_crc_bytes.len()].copy_from_slice(new_crc_bytes);
+        obfuscated_cheat_string[new_crc_bytes.len()] = b'x';
 
         cheat_string_crc = !crc32fast::hash(&obfuscated_cheat_string) as i32;
     }
-    let c1 = !crc32fast::hash(&cheat_string.as_bytes()[cheat_string.len() / 3..]) ^ accumulator;
-    let c2 = !crc32fast::hash(&obfuscated_cheat_string) ^ accumulator;
+    let c1 = !crc32fast::hash(&cheat_string.as_bytes()[cheat_string.len() / 3..]);
+    let c2 = !crc32fast::hash(&obfuscated_cheat_string);
 
-    (c1, c2)
+    c1 ^ c2
 }
 
 /// Checks a single candidate cheat code against a list of known cheat hashes
-pub fn check_single_cheat(cheat: String, hash_set: &HashSet<String>) {
+pub fn check_single_cheat(cheat: String, hash_set: &HashSet<u32>) {
     // Calculate checksum for this cheat
-    let (c1, c2) = calc_hash(cheat.to_string());
-    let hash_string: String = format!("{c1:#010x},{c2:#010x}");
+    let c = calc_hash(cheat.to_string());
 
     // Check for matches...
-    if hash_set.contains(&hash_string) {
-        println!("Found a cheat! {} ({})", cheat.bold().green(), hash_string);
+    if hash_set.contains(&c) {
+        println!("Found a cheat! {} ({})", cheat.bold().green(), c);
     }
+}
+
+fn hex_to_u32(s: &str) -> u32 {
+    let s = s.strip_prefix("0").unwrap_or(s);
+    let s = s.strip_prefix("x").unwrap_or(s);
+    let s = s.strip_prefix("X").unwrap_or(s);
+
+    u32::from_str_radix(s, 16).unwrap_or(0)
 }
 
 /// Hashes a list of candidate cheat codes and checks them against a list of known cheat hashes
@@ -82,8 +62,10 @@ pub fn crack_hashes(cheat_list: &String, hash_list: &String) {
     // Build up hash set
     let hash_list_entries = lines_from_file(hash_list);
     let mut hash_set = HashSet::new();
-    for hash in hash_list_entries {
-        hash_set.insert(hash);
+    for hash_line in hash_list_entries {
+        let (a_s, b_s) = hash_line.split_once(",").expect("Hash list malformed!");
+        let (a, b) = (hex_to_u32(a_s), hex_to_u32(b_s));
+        hash_set.insert(a ^ b);
     }
 
     // Load candidate cheats
