@@ -1,6 +1,5 @@
 use std::{
     fs::File,
-    fmt::Write,
     io::{prelude::*, BufReader},
     path::Path,
     time::SystemTime,
@@ -14,18 +13,15 @@ pub fn calc_hash(cheat_string: String) -> u32 {
     let mut obfuscated_cheat_string: [u8; 20] = *b"12345678901234567890";
     let mut cheat_string_crc = !crc32fast::hash(cheat_string.as_bytes()) as i32;
     let mut new_crc: i32;
-    let mut new_crc_str = String::new();
+
+    let mut buf = itoa::Buffer::new();
 
     for i in 0..100_000 {
         new_crc = cheat_string_crc + i;
 
-        new_crc_str.clear();
-        let _ignore_err = write!(new_crc_str, "{new_crc}");
-
-        let new_crc_bytes = new_crc_str.as_bytes();
-
-        obfuscated_cheat_string[..new_crc_bytes.len()].copy_from_slice(new_crc_bytes);
-        obfuscated_cheat_string[new_crc_bytes.len()] = b'x';
+        let new_crc_s = buf.format(new_crc).as_bytes();
+        obfuscated_cheat_string[..new_crc_s.len()].copy_from_slice(new_crc_s);
+        obfuscated_cheat_string[new_crc_s.len()] = b'x';
 
         cheat_string_crc = !crc32fast::hash(&obfuscated_cheat_string) as i32;
     }
@@ -47,9 +43,8 @@ pub fn check_single_cheat(cheat: String, hash_set: &HashSet<u32>) {
 }
 
 fn hex_to_u32(s: &str) -> u32 {
-    let s = s.strip_prefix("0").unwrap_or(s);
-    let s = s.strip_prefix("x").unwrap_or(s);
-    let s = s.strip_prefix("X").unwrap_or(s);
+    let s = s.strip_prefix('0').unwrap_or(s);
+    let s = s.strip_prefix(['x', 'X']).unwrap_or(s);
 
     u32::from_str_radix(s, 16).unwrap_or(0)
 }
@@ -63,7 +58,7 @@ pub fn crack_hashes(cheat_list: &String, hash_list: &String) {
     let hash_list_entries = lines_from_file(hash_list);
     let mut hash_set = HashSet::new();
     for hash_line in hash_list_entries {
-        let (a_s, b_s) = hash_line.split_once(",").expect("Hash list malformed!");
+        let (a_s, b_s) = hash_line.split_once(',').expect("Hash list malformed!");
         let (a, b) = (hex_to_u32(a_s), hex_to_u32(b_s));
         hash_set.insert(a ^ b);
     }
