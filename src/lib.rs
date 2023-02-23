@@ -8,9 +8,12 @@ use std::{
 use colored::Colorize;
 use rayon::prelude::*;
 
+static MAGIC_STR: &[u8; 20] = b"12345678901234567890";
+
 /// Calculates the hashes for a given cheat string
 pub fn calc_hash(cheat_string: String) -> u32 {
-    let mut obfuscated_cheat_string: [u8; 20] = *b"12345678901234567890";
+    let mut obfuscated_cheat_string: [u8; 20] = *MAGIC_STR;
+
     let mut cheat_string_crc = !crc32fast::hash(cheat_string.as_bytes()) as i32;
     let mut new_crc: i32;
 
